@@ -1,0 +1,413 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Holo Cards · 光栅卡</title>
+<style>
+  :root {
+    --card-w: min(72vmin, 62vw, 480px);
+    --flip-time: 0.95s;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { height: 100%; overflow: hidden; }
+  body {
+    background:
+      radial-gradient(120% 90% at 50% 0%, #2b2118 0%, #17120d 55%, #0d0a07 100%);
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 22px; font-family: "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+    color: #d8c6ad; user-select: none; touch-action: none;
+  }
+  header { text-align: center; }
+  header h1 {
+    font-size: 15px; font-weight: 500; letter-spacing: .5em; text-indent: .5em;
+    color: #cbb08a; text-transform: uppercase;
+  }
+  header p { margin-top: 8px; font-size: 12px; color: #7d6f5c; letter-spacing: .15em; }
+
+  .stage { perspective: 1600px; width: var(--card-w); }
+  .card-shadow {
+    width: 86%; height: 26px; margin: 26px auto 0;
+    background: radial-gradient(50% 100% at 50% 50%, rgba(0,0,0,.55), transparent 70%);
+    filter: blur(6px);
+  }
+
+  .card {
+    position: relative; width: 100%; aspect-ratio: 3 / 4;
+    transform-style: preserve-3d;
+    transition: transform var(--flip-time) cubic-bezier(.32, 1.15, .28, 1);
+    will-change: transform; cursor: pointer;
+  }
+  .tilt {
+    position: absolute; inset: 0; transform-style: preserve-3d; will-change: transform;
+  }
+  .face {
+    position: absolute; inset: 0; border-radius: clamp(10px, 2.4vmin, 18px);
+    backface-visibility: hidden; -webkit-backface-visibility: hidden;
+    overflow: hidden; box-shadow: 0 18px 50px rgba(0,0,0,.55), 0 4px 14px rgba(0,0,0,.4);
+  }
+  .face.back { transform: rotateY(180deg); }
+  .layer {
+    position: absolute; inset: 0; background-size: cover; background-position: center;
+    will-change: transform;
+  }
+  .layer.bg        { z-index: 1; }
+  .layer.character { z-index: 2; filter: drop-shadow(0 0 0 rgba(255,190,110,0)); }
+  .layer.text      { z-index: 3; }
+  .layer.frame     { z-index: 4; }
+  .layer.sheen {
+    z-index: 5; pointer-events: none; mix-blend-mode: screen;
+    background:
+      linear-gradient(115deg,
+        transparent 18%,
+        rgba(255,225,180,.10) 34%,
+        rgba(255,246,225,.32) 47%,
+        rgba(255,215,160,.10) 58%,
+        transparent 76%);
+    background-size: 260% 260%; opacity: .25;
+  }
+  .layer.glare {
+    z-index: 6; pointer-events: none; mix-blend-mode: overlay; opacity: 0;
+    background: radial-gradient(60% 45% at var(--gx,50%) var(--gy,40%), rgba(255,255,255,.55), transparent 70%);
+  }
+
+  .counter { font-size: 12px; letter-spacing: .3em; color: #8a7a62; text-align: center; }
+
+  .panel {
+    width: var(--card-w); background: rgba(26, 26, 28, .94);
+    border: 1px solid rgba(255,255,255,.06);
+    border-radius: 16px; padding: 16px 18px 14px;
+    display: flex; flex-direction: column; gap: 12px;
+  }
+  .row { display: flex; align-items: center; gap: 12px; }
+  .row label { flex: 0 0 104px; font-size: 13px; color: #ececee; letter-spacing: .02em; }
+  .row input[type="range"] {
+    flex: 1; height: 4px; appearance: none; -webkit-appearance: none;
+    background: #3a3a3d; border-radius: 999px; outline: none; cursor: pointer;
+  }
+  .row input[type="range"]::-webkit-slider-thumb {
+    appearance: none; -webkit-appearance: none;
+    width: 16px; height: 16px; border-radius: 50%;
+    background: #cde87e; border: none;
+    box-shadow: 0 1px 4px rgba(0,0,0,.5);
+  }
+  .row input[type="range"]::-moz-range-thumb {
+    width: 16px; height: 16px; border-radius: 50%;
+    background: #cde87e; border: none;
+  }
+  .row .val { flex: 0 0 52px; text-align: right; font-size: 12.5px; color: #b9b9be; font-variant-numeric: tabular-nums; }
+
+  .btns { display: flex; gap: 12px; margin-top: 2px; }
+  button {
+    flex: 1; background: #2c2c2e; border: 1px solid rgba(255,255,255,.08);
+    color: #ececee; font-size: 13px; letter-spacing: .04em; padding: 11px 0;
+    border-radius: 10px; cursor: pointer; transition: background .25s;
+  }
+  button:hover { background: #3a3a3d; }
+  button.on { background: #cde87e; border-color: #cde87e; color: #1c1c1e; }
+  .toast {
+    position: fixed; left: 50%; bottom: 9vh; transform: translateX(-50%);
+    background: rgba(20,15,10,.85); border: 1px solid rgba(216,198,173,.3);
+    padding: 10px 22px; border-radius: 999px; font-size: 12.5px; letter-spacing: .12em;
+    color: #e6d7bf; opacity: 0; transition: opacity .4s; pointer-events: none;
+  }
+  .toast.show { opacity: 1; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Holo Cards</h1>
+  <p>点击卡片翻面 · 再点一次随机切换</p>
+</header>
+
+<div class="stage">
+  <div class="card" id="card">
+    <div class="tilt" id="tilt">
+      <div class="face front">
+        <div class="layer bg" id="lBg"></div>
+        <div class="layer character" id="lChar"></div>
+        <div class="layer text" id="lText"></div>
+        <div class="layer frame" id="lFrame"></div>
+        <div class="layer sheen" id="lSheen"></div>
+        <div class="layer glare" id="lGlare"></div>
+      </div>
+      <div class="face back">
+        <div class="layer" id="lBack"></div>
+        <div class="layer sheen" id="lSheenB"></div>
+      </div>
+    </div>
+  </div>
+  <div class="card-shadow" id="shadow"></div>
+</div>
+
+<div class="counter" id="counter">1 / 1</div>
+
+<div class="panel">
+  <div class="row">
+    <label>Depth</label>
+    <input type="range" id="depthSlider" min="-3" max="3" step="0.01" value="0.05">
+    <span class="val" id="depthVal">0.05×</span>
+  </div>
+  <div class="row">
+    <label>Contour glow</label>
+    <input type="range" id="glowSlider" min="0" max="1" step="0.01" value="0.15">
+    <span class="val" id="glowVal">0.15×</span>
+  </div>
+  <div class="btns">
+    <button id="motionBtn">Enable motion</button>
+    <button id="resetBtn">Recenter</button>
+  </div>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+/* ================================================================
+   卡片配置 —— 四张卡的接口在这里。
+   每张卡一张背景、一个角色（透明底）、一层文字（透明底）、一个边框（透明内部），
+   背面共用 assets/back.webp。
+   补齐第 2~4 张卡时，往数组里加条目、把图放进 assets/ 即可。
+   ================================================================ */
+const BACK = 'assets/back.webp';
+const CARDS = [
+  {
+    name: '一只柿子的小宇宙',
+    bg:        'assets/bg.webp',
+    character: 'assets/character.webp',
+    text:      'assets/text.webp',
+    frame:     'assets/frame.webp',
+  },
+  // —— 预留卡位：把下面注释解开并填入素材 ——
+  // { name: '卡二', bg: 'assets/bg2.webp', character: 'assets/char2.webp', text: 'assets/text2.webp', frame: 'assets/frame2.webp' },
+  // { name: '卡三', ... },
+  // { name: '卡四', ... },
+];
+
+/* ---------- DOM ---------- */
+const $ = id => document.getElementById(id);
+const card = $('card'), tiltEl = $('tilt'), counter = $('counter'), toast = $('toast');
+const layers = { bg: $('lBg'), character: $('lChar'), text: $('lText'), frame: $('lFrame') };
+$('lBack').style.backgroundImage = `url(${BACK})`;
+CARDS.forEach(c => [c.bg, c.character, c.text, c.frame].forEach(u => { const i = new Image(); i.src = u; }));
+const pre = new Image(); pre.src = BACK;
+
+/* ---------- 状态 ---------- */
+let index = 0;
+let flipped = false;      // 是否在背面
+let flipping = false;
+let motionOn = false;     // 陀螺仪开启
+let gyroCal = null;       // 陀螺仪零点
+const pointer = { x: 0, y: 0, active: 0 };   // 输入目标 ([-1,1])
+const smooth  = { x: 0, y: 0 };              // 平滑后的输入
+
+function showCard(i) {
+  const c = CARDS[i];
+  layers.bg.style.backgroundImage        = `url(${c.bg})`;
+  layers.character.style.backgroundImage = `url(${c.character})`;
+  layers.text.style.backgroundImage      = `url(${c.text})`;
+  layers.frame.style.backgroundImage     = `url(${c.frame})`;
+  counter.textContent = `${i + 1} / ${CARDS.length}`;
+}
+showCard(0);
+
+function showToast(msg) {
+  toast.textContent = msg; toast.classList.add('show');
+  clearTimeout(showToast._t);
+  showToast._t = setTimeout(() => toast.classList.remove('show'), 2200);
+}
+
+/* ---------- 点击：翻面 / 随机切换 ---------- */
+card.addEventListener('click', () => {
+  if (flipping) return;
+  if (!flipped) {
+    maybeAskGyro();                       // iOS 权限需挂在用户手势上
+    flipTo(true);
+  } else {
+    let next = index;
+    if (CARDS.length > 1) {
+      while (next === index) next = Math.floor(Math.random() * CARDS.length);
+    }
+    flipTo(false, next);
+  }
+});
+
+function flipTo(back, switchTo) {
+  flipping = true;
+  if (back) {
+    card.style.transform = 'rotateY(180deg)';
+    flipped = true;
+    setTimeout(() => flipping = false, 950);
+  } else {
+    card.style.transform = 'rotateY(360deg)';
+    flipped = false;
+    if (switchTo !== undefined && switchTo !== index) {
+      // 翻到约 90° 侧对观众时换卡，正面出现时已是新卡
+      setTimeout(() => { index = switchTo; showCard(index); }, 430);
+    }
+    setTimeout(() => {
+      flipping = false;
+      card.style.transition = 'none';
+      card.style.transform = 'rotateY(0deg)';
+      void card.offsetWidth;                    // 强制回流，避免反向翻转
+      card.style.transition = '';
+    }, 960);
+  }
+}
+
+/* ---------- 待机摇晃 + 输入平滑 ---------- */
+// 每张卡一组随机相位/频率，让摇晃"随机自由"
+const sway = {
+  ax: 0.9 + Math.random() * 0.5, ay: 1.1 + Math.random() * 0.5,
+  px: Math.random() * 6.28,      py: Math.random() * 6.28,
+  fx: 0.32 + Math.random() * .18, fy: 0.24 + Math.random() * .16,
+  rx: Math.random() * 6.28,      ry: Math.random() * 6.28,
+};
+let lastInput = 0;
+
+addEventListener('mousemove', e => {
+  pointer.x = (e.clientX / innerWidth) * 2 - 1;
+  pointer.y = (e.clientY / innerHeight) * 2 - 1;
+  pointer.active = 1; lastInput = performance.now();
+});
+document.addEventListener('mouseleave', () => pointer.active = 0);
+
+// 触摸拖动 = 临时视差
+let touchId = null, tStart = null;
+addEventListener('touchstart', e => {
+  if (touchId !== null) return;
+  const t = e.changedTouches[0]; touchId = t.identifier;
+  tStart = { x: t.clientX, y: t.clientY, time: Date.now() };
+}, { passive: true });
+addEventListener('touchmove', e => {
+  for (const t of e.changedTouches) if (t.identifier === touchId) {
+    pointer.x = Math.max(-1, Math.min(1, (t.clientX - tStart.x) / 90));
+    pointer.y = Math.max(-1, Math.min(1, (t.clientY - tStart.y) / 90));
+    pointer.active = 1; lastInput = performance.now();
+  }
+}, { passive: true });
+addEventListener('touchend', e => {
+  for (const t of e.changedTouches) if (t.identifier === touchId) {
+    touchId = null;
+    setTimeout(() => pointer.active = 0, 600);
+    if (tStart && Date.now() - tStart.time < 350 &&
+        Math.hypot(t.clientX - tStart.x, t.clientY - tStart.y) < 12) {
+      // 视为点击，交给 card 的 click（浏览器会派发）；这里不重复处理
+    }
+  }
+});
+
+/* ---------- 控制面板：Depth / Contour glow ---------- */
+let depth = 0.05;   // -3 深入 … +3 浮出
+let glow = 0.15;    // 0 关 … 1 最强
+$('depthSlider').addEventListener('input', e => {
+  depth = parseFloat(e.target.value);
+  $('depthVal').textContent = depth.toFixed(2) + '×';
+});
+$('glowSlider').addEventListener('input', e => {
+  glow = parseFloat(e.target.value);
+  $('glowVal').textContent = glow.toFixed(2) + '×';
+});
+
+/* ---------- 陀螺仪 ---------- */
+function maybeAskGyro(force) {
+  if (motionOn) return;
+  if (!force && !isCoarse()) return;
+  const D = window.DeviceOrientationEvent;
+  if (D && typeof D.requestPermission === 'function') {
+    D.requestPermission().then(s => {
+      if (s === 'granted') enableGyro();
+      else showToast('未获得体感权限，可继续用拖动');
+    }).catch(() => {});
+  } else if (D) {
+    enableGyro();      // Android 直接可用
+  } else if (force) {
+    showToast('此设备不支持陀螺仪');
+  }
+}
+function isCoarse() { return matchMedia('(pointer: coarse)').matches; }
+
+function enableGyro() {
+  motionOn = true;
+  gyroCal = null;
+  const btn = $('motionBtn');
+  btn.classList.add('on'); btn.textContent = 'Motion on';
+  addEventListener('deviceorientation', onGyro);
+  showToast('陀螺仪已开启，转动手机试试');
+}
+function onGyro(e) {
+  if (e.beta == null || e.gamma == null) return;
+  if (!gyroCal) gyroCal = { b: e.beta, g: e.gamma };
+  // 竖屏下 beta/gamma 直接映射；灵敏度适中
+  pointer.x = Math.max(-1, Math.min(1, (e.gamma - gyroCal.g) / 28));
+  pointer.y = Math.max(-1, Math.min(1, (e.beta  - gyroCal.b) / 28));
+  pointer.active = 1; lastInput = performance.now();
+}
+
+$('motionBtn').addEventListener('click', () => {
+  if (motionOn) {
+    motionOn = false; removeEventListener('deviceorientation', onGyro);
+    $('motionBtn').classList.remove('on'); $('motionBtn').textContent = 'Enable motion';
+    pointer.active = 0;
+  } else if (!('DeviceOrientationEvent' in window)) {
+    showToast('此设备不支持陀螺仪');
+  } else {
+    maybeAskGyro(true);
+  }
+});
+$('resetBtn').addEventListener('click', () => {
+  pointer.x = pointer.y = 0; pointer.active = 0; gyroCal = null;
+});
+
+/* ---------- 渲染循环 ---------- */
+const lerp = (a, b, t) => a + (b - a) * t;
+function frame(now) {
+  const t = now / 1000;
+  // 待机摇晃（始终存在），输入激活时收弱
+  const idle = pointer.active ? 0.35 : 1;
+  const sx = (Math.sin(t * sway.fx * 2 + sway.px) * 0.6 +
+              Math.sin(t * sway.fx * 3.7 + sway.rx) * 0.4) * 0.14 * idle;
+  const sy = (Math.sin(t * sway.fy * 2 + sway.py) * 0.6 +
+              Math.sin(t * sway.fy * 4.3 + sway.ry) * 0.4) * 0.12 * idle;
+
+  smooth.x = lerp(smooth.x, pointer.active ? pointer.x : 0, 0.08);
+  smooth.y = lerp(smooth.y, pointer.active ? pointer.y : 0, 0.08);
+
+  const vx = Math.max(-1, Math.min(1, smooth.x + sx));
+  const vy = Math.max(-1, Math.min(1, smooth.y + sy));
+
+  // 卡体倾斜写在 tilt 层，翻面角度由 card 层独立过渡，互不打架
+  tiltEl.style.transform = `rotateY(${vx * 7}deg) rotateX(${-vy * 6}deg)`;
+
+  // Depth：-3 贴底（前景几乎不动）… +3 浮出（前景位移加倍）
+  const dMul = Math.max(0, 1 + depth / 3);
+
+  // 图层视差：背景反向、越外层位移越大；带 bleed 放大防露边
+  layers.bg.style.transform       = `scale(1.10) translate3d(${-vx*16}px, ${-vy*10}px, 0)`;
+  layers.character.style.transform = `scale(1.06) translate3d(${vx*26*dMul}px, ${vy*14*dMul}px, 0)`;
+  layers.text.style.transform      = `scale(1.05) translate3d(${vx*34*dMul}px, ${vy*18*dMul}px, 0)`;
+  layers.frame.style.transform     = `scale(1.09) translate3d(${vx*46*dMul}px, ${vy*24*dMul}px, 0)`;
+
+  // 全息光泽 + 轮廓光（Contour glow 滑杆控制强度）
+  const energy = Math.min(1, Math.hypot(vx, vy));
+  const gMul = Math.min(2.2, glow / 0.15);   // 相对默认 0.15 的倍率
+  $('lSheen').style.backgroundPosition = `${50 + vx*40}% ${50 + vy*40}%`;
+  $('lSheen').style.opacity = (0.18 + energy * 0.55).toFixed(3);
+  $('lSheenB').style.backgroundPosition = `${50 - vx*40}% ${50 - vy*40}%`;
+  $('lSheenB').style.opacity = (0.18 + energy * 0.55).toFixed(3);
+  const g = $('lGlare');
+  g.style.setProperty('--gx', `${50 + vx*30}%`);
+  g.style.setProperty('--gy', `${42 + vy*26}%`);
+  g.style.opacity = (energy * 0.35).toFixed(3);
+  layers.character.style.filter =
+    `drop-shadow(0 0 ${((6 + energy*22) * gMul).toFixed(1)}px rgba(255,185,100,${Math.min(1, (0.10 + energy*0.30) * gMul).toFixed(3)}))`;
+
+  // 影子随倾斜微移
+  const sh = $('shadow');
+  sh.style.transform = `translateX(${vx*14}px) scaleX(${1 - energy*0.06})`;
+
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>
